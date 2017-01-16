@@ -1,0 +1,37 @@
+.hidden {
+    display: none;
+}
+.game {
+    font-family: Arial, Helvetica, sans-serif;
+}
+.game svg {
+    display: block;
+    border: solid 2px #bfbfbf;
+}
+.game .header {
+    border-top: solid 2px #bfbfbf;
+    width: 200;
+}
+.game .header .score {
+    margin-left: 10px;
+    color: #aaaaff;
+}
+.game .header .line-count {
+    margin-left: 30px;
+    color: #aaffaa;
+}
+.game .message {
+    color: #dfdfdf;
+    position: absolute;
+    top: 25%;
+    left: 25px;
+}
+.btn {
+    color: #5f5f5f;
+}
+.btn:hover {
+    background-color: #efefef;
+}
+.btn.pause {
+    float: right;
+}
