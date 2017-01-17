@@ -131,6 +131,7 @@
             this.updateText();
             return this;
         }
+        // value should be bound with a two way binding
         withValue(value) {
             this.value = value;
             let valueProp;
@@ -152,14 +153,6 @@
                 this.element.onchange = function () {
                     setInputType.call(this);
                     binding.model.set(binding.onUserUpdate(this.element[valueProp]));
-                }.bind(this);
-            }
-            else if (this.value instanceof Binding_1.Binding) {
-                let binding = value;
-                binding.model.registerCallback(this, this.updateValue.bind(this));
-                this.element.onchange = function () {
-                    setInputType.call(this);
-                    binding.model.set(this.element[valueProp]);
                 }.bind(this);
             }
             return this;
@@ -265,7 +258,63 @@
     exports.AbstractComponent = AbstractComponent;
 });
 
-},{"./Binding":2,"./ModelElement":6}],2:[function(require,module,exports){
+},{"./Binding":3,"./ModelElement":8}],2:[function(require,module,exports){
+(function (dependencies, factory) {
+    if (typeof module === 'object' && typeof module.exports === 'object') {
+        var v = factory(require, exports); if (v !== undefined) module.exports = v;
+    }
+    else if (typeof define === 'function' && define.amd) {
+        define(dependencies, factory);
+    }
+})(["require", "exports"], function (require, exports) {
+    "use strict";
+    class AbstractElement {
+        destroy() {
+            if (!this.boundComponents)
+                return;
+            for (let component of this.boundComponents.values())
+                component.destroy();
+        }
+        bindComponent(component) {
+            if (!this.boundComponents) {
+                this.boundComponents = new Set();
+            }
+            this.boundComponents.add(component);
+        }
+        registerCallback(component, updateCallback) {
+            if (!this.updateCallbacks)
+                this.updateCallbacks = new Map();
+            let callbackSet = this.updateCallbacks.get(component);
+            if (callbackSet == undefined) {
+                callbackSet = new Set();
+                this.updateCallbacks.set(component, callbackSet);
+            }
+            callbackSet.add(updateCallback);
+        }
+        unregisterCallback(component, callback) {
+            if (!this.updateCallbacks)
+                return;
+            if (!callback)
+                this.updateCallbacks.delete(component);
+            else if (this.updateCallbacks.has(component)) {
+                let set = this.updateCallbacks.get(component);
+                if (set)
+                    set.delete(callback);
+            }
+        }
+        doUpdate() {
+            if (!this.updateCallbacks)
+                return;
+            for (let callbackSet of this.updateCallbacks.values()) {
+                for (let callback of callbackSet.values())
+                    callback(this.get());
+            }
+        }
+    }
+    exports.AbstractElement = AbstractElement;
+});
+
+},{}],3:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -355,7 +404,7 @@
     exports.persist = persist;
 });
 
-},{"./ModelArray":4,"./ModelElement":6}],3:[function(require,module,exports){
+},{"./ModelArray":6,"./ModelElement":8}],4:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -384,7 +433,35 @@
     exports.default = Component;
 });
 
-},{"./AbstractComponent":1}],4:[function(require,module,exports){
+},{"./AbstractComponent":1}],5:[function(require,module,exports){
+(function (dependencies, factory) {
+    if (typeof module === 'object' && typeof module.exports === 'object') {
+        var v = factory(require, exports); if (v !== undefined) module.exports = v;
+    }
+    else if (typeof define === 'function' && define.amd) {
+        define(dependencies, factory);
+    }
+})(["require", "exports", "./AbstractElement"], function (require, exports) {
+    "use strict";
+    const AbstractElement_1 = require("./AbstractElement");
+    class FunctionalElement extends AbstractElement_1.AbstractElement {
+        constructor(handler, ...listenedTo) {
+            super();
+            this.handler = handler;
+            this.listenedTo = listenedTo;
+            for (let model of this.listenedTo)
+                model.registerCallback(model, this.doUpdate.bind(this));
+        }
+        get() {
+            return this.handler.apply(this.handler, this.listenedTo.map(function (model) {
+                return model.get();
+            }));
+        }
+    }
+    exports.FunctionalElement = FunctionalElement;
+});
+
+},{"./AbstractElement":2}],6:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -433,7 +510,7 @@
     exports.default = ModelArray;
 });
 
-},{"./ModelCollection":5,"./ModelElement":6}],5:[function(require,module,exports){
+},{"./ModelCollection":7,"./ModelElement":8}],7:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -470,7 +547,7 @@
     exports.ModelCollection = ModelCollection;
 });
 
-},{"./ModelElement":6}],6:[function(require,module,exports){
+},{"./ModelElement":8}],8:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -478,10 +555,12 @@
     else if (typeof define === 'function' && define.amd) {
         define(dependencies, factory);
     }
-})(["require", "exports"], function (require, exports) {
+})(["require", "exports", "./AbstractElement"], function (require, exports) {
     "use strict";
-    class ModelElement {
+    const AbstractElement_1 = require("./AbstractElement");
+    class ModelElement extends AbstractElement_1.AbstractElement {
         constructor(data) {
+            super();
             this.data = data;
         }
         get() {
@@ -492,53 +571,12 @@
             if (doUpdate)
                 this.doUpdate();
         }
-        destroy() {
-            if (!this.boundComponents)
-                return;
-            for (let component of this.boundComponents.values())
-                component.destroy();
-        }
-        doUpdate() {
-            if (!this.updateCallbacks)
-                return;
-            for (let callbackSet of this.updateCallbacks.values()) {
-                for (let callback of callbackSet.values())
-                    callback(this.data);
-            }
-        }
-        bindComponent(component) {
-            if (!this.boundComponents) {
-                this.boundComponents = new Set();
-            }
-            this.boundComponents.add(component);
-        }
-        registerCallback(component, updateCallback) {
-            if (!this.updateCallbacks)
-                this.updateCallbacks = new Map();
-            let callbackSet = this.updateCallbacks.get(component);
-            if (callbackSet == undefined) {
-                callbackSet = new Set();
-                this.updateCallbacks.set(component, callbackSet);
-            }
-            callbackSet.add(updateCallback);
-        }
-        unregisterCallback(component, callback) {
-            if (!this.updateCallbacks)
-                return;
-            if (!callback)
-                this.updateCallbacks.delete(component);
-            else if (this.updateCallbacks.has(component)) {
-                let set = this.updateCallbacks.get(component);
-                if (set)
-                    set.delete(callback);
-            }
-        }
     }
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = ModelElement;
 });
 
-},{}],7:[function(require,module,exports){
+},{"./AbstractElement":2}],9:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -561,7 +599,7 @@
     exports.default = SVGComponent;
 });
 
-},{"./Component":3}],8:[function(require,module,exports){
+},{"./Component":4}],10:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -583,7 +621,7 @@
     exports.BlockModel = BlockModel;
 });
 
-},{"../ModelElement":6}],9:[function(require,module,exports){
+},{"../ModelElement":8}],11:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -618,7 +656,7 @@
     exports.LPieceModel = LPieceModel;
 });
 
-},{"./BlockModel":8,"./PieceModel":12}],10:[function(require,module,exports){
+},{"./BlockModel":10,"./PieceModel":14}],12:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -654,7 +692,7 @@
     exports.LongPieceModel = LongPieceModel;
 });
 
-},{"./BlockModel":8,"./PieceModel":12}],11:[function(require,module,exports){
+},{"./BlockModel":10,"./PieceModel":14}],13:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -690,7 +728,7 @@
     exports.Piece = Piece;
 });
 
-},{"../SVGComponent":7,"./BlockModel":8}],12:[function(require,module,exports){
+},{"../SVGComponent":9,"./BlockModel":10}],14:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -793,7 +831,7 @@
     exports.PieceModel = PieceModel;
 });
 
-},{"./BlockModel":8,"./shared":17}],13:[function(require,module,exports){
+},{"./BlockModel":10,"./shared":19}],15:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -827,7 +865,7 @@
     exports.PyramdPieceModel = PyramdPieceModel;
 });
 
-},{"./BlockModel":8,"./PieceModel":12}],14:[function(require,module,exports){
+},{"./BlockModel":10,"./PieceModel":14}],16:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -862,7 +900,7 @@
     exports.SPieceBlockModel = SPieceBlockModel;
 });
 
-},{"./BlockModel":8,"./PieceModel":12}],15:[function(require,module,exports){
+},{"./BlockModel":10,"./PieceModel":14}],17:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -898,7 +936,7 @@
     exports.SquarePieceModel = SquarePieceModel;
 });
 
-},{"./BlockModel":8,"./PieceModel":12}],16:[function(require,module,exports){
+},{"./BlockModel":10,"./PieceModel":14}],18:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -933,7 +971,7 @@
     exports.ZPieceBlockModel = ZPieceBlockModel;
 });
 
-},{"./BlockModel":8,"./PieceModel":12}],17:[function(require,module,exports){
+},{"./BlockModel":10,"./PieceModel":14}],19:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -954,7 +992,7 @@
     })(Direction = exports.Direction || (exports.Direction = {}));
 });
 
-},{}],18:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 (function (dependencies, factory) {
     if (typeof module === 'object' && typeof module.exports === 'object') {
         var v = factory(require, exports); if (v !== undefined) module.exports = v;
@@ -962,7 +1000,7 @@
     else if (typeof define === 'function' && define.amd) {
         define(dependencies, factory);
     }
-})(["require", "exports", "../SVGComponent", "./Piece", "./BlockModel", "./shared", "./SquarePieceModel", "./SPieceModel", "./ZPieceBlockModel", "./LPieceModel", "./LongPieceModel", "../Component", "../ModelElement", "../Binding", "./PyramdPieceModel"], function (require, exports) {
+})(["require", "exports", "../SVGComponent", "./Piece", "./BlockModel", "./shared", "./SquarePieceModel", "./SPieceModel", "./ZPieceBlockModel", "./LPieceModel", "./LongPieceModel", "../Component", "../ModelElement", "../Binding", "./PyramdPieceModel", "../FunctionalComponent"], function (require, exports) {
     "use strict";
     const SVGComponent_1 = require("../SVGComponent");
     const Piece_1 = require("./Piece");
@@ -977,6 +1015,7 @@
     const ModelElement_1 = require("../ModelElement");
     const Binding_1 = require("../Binding");
     const PyramdPieceModel_1 = require("./PyramdPieceModel");
+    const FunctionalComponent_1 = require("../FunctionalComponent");
     const LEFT_KEYCODE = 37;
     const UP_KEYCODE = 38;
     const RIGHT_KEYCODE = 39;
@@ -984,6 +1023,11 @@
     const SPACE_KEYCODE = 32;
     const P_KEYCODE = 80;
     const S_KEYCODE = 83;
+    const PIECES_PER_LEVEL = 100;
+    const POINTS_PER_PIECE = 1;
+    const LEVEL_MULTIPLIER = 2;
+    const POINTS_PER_LINE = 10;
+    const LINE_MULTIPLIER = 2;
     class LineModel {
         constructor() {
             this.blocks = {};
@@ -1014,7 +1058,14 @@
             this.showMessage = new ModelElement_1.default(false);
             this.state = new ModelElement_1.default(State.INIT);
             this.score = new ModelElement_1.default(0);
+            this.pieceCount = new ModelElement_1.default(0);
             this.lineCount = new ModelElement_1.default(0);
+            this.level = new FunctionalComponent_1.FunctionalElement(function (pieceCount) {
+                return Math.ceil((pieceCount + 1) / PIECES_PER_LEVEL);
+            }, this.pieceCount);
+            this.tickLength = new FunctionalComponent_1.FunctionalElement(function (level) {
+                return 1000 / Math.log2(level + 1);
+            }, this.level);
         }
         resetCurrentPiece(tetris) {
             this.currentPiece = new TetrisModel.PIECES[Math.floor((Math.random() * (TetrisModel.PIECES.length)))]((shared_1.gameWidth / 2) - 1, 0);
@@ -1059,9 +1110,6 @@
                     case P_KEYCODE:
                         this.pause();
                         break;
-                    case S_KEYCODE:
-                        this.restart();
-                        break;
                 }
             });
             this.svg = new SVGComponent_1.default("svg")
@@ -1083,8 +1131,16 @@
                 .withClass("score"))
                 .child(new Component_1.default("span")
                 .withText("Start")
-                .withClass("btn start")
-                .on("click", this.restart.bind(this))
+                .withClass("btn start", new Binding_1.Binding(this.model.state, function (state) {
+                return state == State.INIT || state == State.GAMEOVER ? "" : "hidden";
+            })).on("click", this.restart.bind(this))
+                .reinit(), new Component_1.default("span")
+                .withClass("level", new Binding_1.Binding(this.model.state, function (state) {
+                return state == State.INIT || state == State.GAMEOVER ? "hidden" : "";
+            }))
+                .withText(new Binding_1.Binding(this.model.level, function (level) {
+                return "Level " + level;
+            }))
                 .reinit(), new Component_1.default("label")
                 .withClass("score")
                 .withText(this.model.score)
@@ -1118,6 +1174,7 @@
             this.model.showMessage.set(false);
             this.model.score.set(0);
             this.model.lineCount.set(0);
+            this.model.pieceCount.set(0);
             for (let y in this.lines) {
                 let line = this.lines[y];
                 if (line !== this.lastLine)
@@ -1149,7 +1206,7 @@
                 }
                 this.model.currentPiece.move(this, shared_1.Direction.DOWN);
                 this.tick();
-            }.bind(this), 750);
+            }.bind(this), this.model.tickLength.get());
         }
         pause() {
             let state = this.model.state.get();
@@ -1176,12 +1233,13 @@
             this.model.showMessage.set(true);
         }
         updateLines() {
-            let moreCompletedLines = false;
+            let lines = 0;
             for (let y = shared_1.gameHeight * BlockModel_1.BlockModel.SIDE_LENGTH; y >= 0; y -= BlockModel_1.BlockModel.SIDE_LENGTH) {
                 let line = this.lines[y];
                 if (line == undefined)
                     break;
                 if (line.isComplete()) {
+                    lines++;
                     this.model.lineCount.set(this.model.lineCount.get() + 1);
                     this.model.score.set(this.model.score.get() + 250);
                     line.clear();
@@ -1207,11 +1265,11 @@
                     y += BlockModel_1.BlockModel.SIDE_LENGTH;
                 }
             }
-            if (moreCompletedLines)
-                this.updateLines();
+            this.model.score.set(this.model.score.get() + ((POINTS_PER_LINE * Math.pow(LEVEL_MULTIPLIER, this.model.level.get() - 1))) * Math.pow(LINE_MULTIPLIER, this.model.level.get() - 1));
         }
         addPiece(piece) {
-            this.model.score.set(this.model.score.get() + 100);
+            this.model.pieceCount.set(this.model.pieceCount.get() + 1);
+            this.model.score.set(this.model.score.get() + (POINTS_PER_PIECE * Math.pow(LEVEL_MULTIPLIER, this.model.level.get())));
             this.svg.child(piece.blocks);
         }
         releasePiece(piece) {
@@ -1238,4 +1296,4 @@
     window["tetris"] = tetris;
 });
 
-},{"../Binding":2,"../Component":3,"../ModelElement":6,"../SVGComponent":7,"./BlockModel":8,"./LPieceModel":9,"./LongPieceModel":10,"./Piece":11,"./PyramdPieceModel":13,"./SPieceModel":14,"./SquarePieceModel":15,"./ZPieceBlockModel":16,"./shared":17}]},{},[18]);
+},{"../Binding":3,"../Component":4,"../FunctionalComponent":5,"../ModelElement":8,"../SVGComponent":9,"./BlockModel":10,"./LPieceModel":11,"./LongPieceModel":12,"./Piece":13,"./PyramdPieceModel":15,"./SPieceModel":16,"./SquarePieceModel":17,"./ZPieceBlockModel":18,"./shared":19}]},{},[20]);
